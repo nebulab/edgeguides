@@ -2683,6 +2683,10 @@ mutation checkoutPayment {
 
 We can see how the payment information has been associated to the returned order.
 
+{% hint style="danger" %}
+In most cases, it's better not to deal with such sensitive information as credit card numbers directly in your store. There're extensions to integrate third-party payment systems, like [solidus\_stripe](https://github.com/solidusio/solidus\_stripe) or [solidus\_square](https://github.com/nebulab/solidus\_square). If you do need to create your custom payment system, please check out our [payments section](../advanced-solidus/payments-and-refunds.md), and don't forget to ensure [PCI compliance](https://www.pcisecuritystandards.org).
+{% endhint %}
+
 ### Checkout 4 - Confirm order
 
 We still need to confirm our order. As in the previous states, we need to tell the system that we're ready for the next step:

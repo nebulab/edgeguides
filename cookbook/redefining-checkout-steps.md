@@ -1,6 +1,8 @@
 # Redefining checkout steps
 
-{% embed url="https://www.youtube.com/watch?v=p\_O4d9k4qxI" %}
+{% embed url="https://www.youtube.com/watch?v=p_O4d9k4qxI" %}
+If you prefer to watch a video about customizing checkout steps, we have prepared this screencast that cover the same topics.
+{% endembed %}
 
 Solidus comes bundled with a robust checkout system that caters to the needs of the majority of eCommerce stores. However, this system doesn't fit the needs for every business.
 
@@ -13,7 +15,7 @@ The default Solidus checkout flow follows these steps, from start to finish:
 1. Cart
 2. Address
 3. Delivery
-4. Payment \(if needed\)
+4. Payment (if needed)
 5. Confirm
 6. Complete
 
@@ -21,7 +23,7 @@ The default Solidus checkout flow follows these steps, from start to finish:
 
 You'll need to decorate the order model to add or remove checkout steps. Inside the decorator, you just need to add `remove_checkout_step` and pass in the name of the step you want to remove. For example, if you wanted to remove the address step, your decorator might look like this:
 
-{% code title="app/decorators/my\_app/spree/order\_decorator.rb" %}
+{% code title="app/decorators/my_app/spree/order_decorator.rb" %}
 ```ruby
 # frozen_string_literal: true
 
@@ -48,7 +50,7 @@ Please keep in mind the following caveats for removing checkout steps:
 
 If you want to add a custom checkout step, you will need to call `add_checkout_step` in the order decorator, and pass in your custom step name, as well as a `before` or `after` attribute, so that the order state machine knows where to put this custom step in the checkout flow.
 
-{% code title="app/decorators/my\_app/spree/order\_decorator.rb" %}
+{% code title="app/decorators/my_app/spree/order_decorator.rb" %}
 ```ruby
 # frozen_string_literal: true
 
@@ -80,9 +82,9 @@ en:
 {% endcode %}
 {% endtab %}
 
-{% tab title="app/views/spree/checkout/\_my\_custom\_step.html.erb" %}
-{% code title="app/views/spree/checkout/\_my\_custom\_step.html.erb" %}
-```text
+{% tab title="app/views/spree/checkout/_my_custom_step.html.erb" %}
+{% code title="app/views/spree/checkout/_my_custom_step.html.erb" %}
+```
 <div>
   The customer will see this partial when they are on your checkout step. Be sure to add a continue button!
 </div>
@@ -100,7 +102,7 @@ en:
 
 Before proceeding to any step, the checkout controller will check to see if a method named `before_#{checkout_step_name}` exists. If it does, it runs that method. That means that you can run custom logic before the controller moves on to your step, which can be handy if you want to set things up for the view.
 
-{% code title="app/controllers/my\_app/checkout\_controller\_decorator.rb" %}
+{% code title="app/controllers/my_app/checkout_controller_decorator.rb" %}
 ```ruby
 # frozen_string_literal: true
 
@@ -120,19 +122,21 @@ end
 
 If you need to permit additional attributes for your custom step, you can add the attributes to the `checkout_confirm_attributes` set in an initializer.
 
-{% code title="config/initializers/my\_app\_initializer.rb" %}
+{% code title="config/initializers/my_app_initializer.rb" %}
 ```ruby
-Spree::PermittedAttributes.checkout_confirm_attributes << [:my_custom_attribute]
+Spree::PermittedAttributes.checkout_my_custom_step_attributes << [:my_custom_attribute]
 ```
 {% endcode %}
 
-The attribute set that is used changes depending on the step - `payment` uses `checkout_payment_attributes`, `address` uses `checkout_address_attributes`, and so on. `checkout_confirm_attributes` is used for the confirm step, and for any step that the checkout controller does not recognize - like our new custom step.
+{% hint style="danger" %}
+**The attribute set that is used changes depending on the step**: `payment` uses `checkout_payment_attributes`, `address` uses `checkout_address_attributes`, and so on. `checkout_confirm_attributes` is used for the confirm step, and for any step that the checkout controller does not recognize - like our new custom step.
+{% endhint %}
 
 ## Conditional checkout steps
 
 You can conditionally include steps in the checkout flow if necessary, by passing a conditional in with the step in `add_checkout_step`. For example, if we only want to include our custom step if the orders total is over $50, we can pass that requirement in as a conditional:
 
-{% code title="app/decorators/my\_app/spree/order\_decorator.rb" %}
+{% code title="app/decorators/my_app/spree/order_decorator.rb" %}
 ```ruby
 # frozen_string_literal: true
 
@@ -173,8 +177,8 @@ end
 {% endcode %}
 {% endtab %}
 
-{% tab title="lib/my\_app/state\_machine.rb" %}
-{% code title="lib/my\_app/state\_machine.rb" %}
+{% tab title="lib/my_app/state_machine.rb" %}
+{% code title="lib/my_app/state_machine.rb" %}
 ```ruby
 # frozen_string_literal: true
 
@@ -203,4 +207,3 @@ end
 {% endcode %}
 {% endtab %}
 {% endtabs %}
-

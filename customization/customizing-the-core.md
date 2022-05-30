@@ -12,15 +12,15 @@ How you customize Solidus will have implications for the stability and maintaina
 
 Solidus provides a rich and powerful API for customizing different aspects of your store's business logic. By defining which classes get called to perform certain tasks in your store, you have the option to either enrich or completely replace Solidus' default functionality.
 
-The [`Spree::AppConfiguration`](https://github.com/solidusio/solidus/blob/v3.0/core/lib/spree/app_configuration.rb) class has a list of all the service object classes that can be natively customized. Look for through the source code of that class and see if there's an option that resembles what you need to do. If yes, bingo!
+The [`Spree::AppConfiguration`](https://github.com/solidusio/solidus/blob/v3.0/core/lib/spree/app\_configuration.rb) class has a list of all the service object classes that can be natively customized. Look for through the source code of that class and see if there's an option that resembles what you need to do. If yes, bingo!
 
 {% hint style="info" %}
 `Spree::AppConfiguration` is not the only configuration class that contains service objects. Before resorting to other customization methods, search through Solidus' source code and see if there are any other options that allow you to replace the class you need.
 {% endhint %}
 
-For instance, Solidus merges a user's "guest" cart with the cart associated to their user account when they sign in. Let's suppose you don't like this default behavior, and would like to keep the two carts separate at all times instead, to avoid confusion for the user. You can see there is [an option](https://github.com/solidusio/solidus/blob/v3.0/core/lib/spree/app_configuration.rb#L372) in the configuration that allows us to control precisely this behavior:
+For instance, Solidus merges a user's "guest" cart with the cart associated to their user account when they sign in. Let's suppose you don't like this default behavior, and would like to keep the two carts separate at all times instead, to avoid confusion for the user. You can see there is [an option](https://github.com/solidusio/solidus/blob/v3.0/core/lib/spree/app\_configuration.rb#L372) in the configuration that allows us to control precisely this behavior:
 
-{% code title="solidus/core/lib/spree/app\_configuration.rb" %}
+{% code title="solidus/core/lib/spree/app:configuration.rb" %}
 ```ruby
 # Allows providing your own class for merging two orders.
 #
@@ -31,9 +31,9 @@ class_name_attribute :order_merger_class, default: 'Spree::OrderMerger'
 ```
 {% endcode %}
 
-Let's also take a look at the [default `Spree::OrderMerger` class](https://github.com/solidusio/solidus/blob/475d9db5d0291dd4aeddc58ec919988c336729bb/core/app/models/spree/order_merger.rb) to understand what public API Solidus expects us to implement in our custom version:
+Let's also take a look at the [default `Spree::OrderMerger` class](https://github.com/solidusio/solidus/blob/475d9db5d0291dd4aeddc58ec919988c336729bb/core/app/models/spree/order\_merger.rb) to understand what public API Solidus expects us to implement in our custom version:
 
-{% code title="solidus/core/app/models/spree/order\_merger.rb" %}
+{% code title="solidus/core/app/models/spree/order:merger.rb" %}
 ```ruby
 module Spree
   class OrderMerger
@@ -56,11 +56,11 @@ end
 As you can see, the order merger exposes two public methods:
 
 * `#initialize`, which accepts an order.
-* `#merge!`, which accepts another order to merge with the first one and \(optionally\) the current user.
+* `#merge!`, which accepts another order to merge with the first one and (optionally) the current user.
 
 Equipped with this information, we can now write our "nil" order merger:
 
-{% code title="app/models/amazing\_store/nil\_order\_merger.rb" %}
+{% code title="app/models/amazing:store/nil:order:merger.rb" %}
 ```ruby
 module AmazingStore
   class NilOrderMerger
@@ -95,54 +95,6 @@ Restart your application server, and Solidus should start using your shiny new o
 When overriding critical functionality, you may also want to make sure that your feature is working correctly in integration. The unit test we have written, for instance, doesn't guarantee in any way that our custom order merger responds to the expected public API and will not break as soon as Solidus tries to call it.
 {% endhint %}
 
-### Using the event bus
-
-Solidus 2.9 introduced the [event bus](https://github.com/solidusio/solidus/pull/3081), an internal pub-sub system. It is based on Rails' instrumentation API, [ActiveSupport::Notifications](https://api.rubyonrails.org/classes/ActiveSupport/Notifications.html), and therefore provides the same public API and capabilities. The event bus is still being rolled out across the platform, but you can already use it with a few native events.
-
-For instance, let's say you want to call some external API every time an order is placed in our store. You could extend the [`Spree::Order#finalize!`](https://github.com/solidusio/solidus/blob/afd7f5b3bc1f3701012b7932725941aa772e04f8/core/app/models/spree/order.rb#L437) method to do it, but what if the implementation changes and the finalization logic is moved somewhere else? With the event bus, you can ask Solidus to run your custom logic whenever an order is finalized, without having to know about the platform's internals.
-
-To accomplish this, you need to create an `OrderNotificationSubscriber` module that looks like this:
-
-{% code title="app/subscribers/amazing\_store/order\_notification\_subscriber.rb" %}
-```ruby
-module AmazingStore
-  class OrderNotificationSubscriber
-    include ::Spree::Event::Subscriber
-    
-    event_action :notify_order, event_name: :order_finalized
-
-    def notify_order(event)
-      order = event.payload.fetch(:order)
-
-      # call your external API here
-    end
-  end
-end
-```
-{% endcode %}
-
-Restart your server, and Solidus will start calling your event subscriber when an order is finalized!
-
-#### Subscribing to multiple events
-
-Thanks to regular expressions, it's also possible to subscribe to multiple events at once:
-
-{% code title="config/initializers/spree.rb" %}
-```ruby
-# ...
-
-Spree::Event.subscribe /.*\.spree/ do |event|
-  puts "#{event.name} => #{event.payload.inspect}"
-end
-```
-{% endcode %}
-
-This can be useful for logging and debugging purposes.
-
-{% hint style="warning" %}
-When subscribing via a regular expression, you **need** to include the `.spree` suffix. Otherwise, you will subscribe to Rails' native events as well! When subscribing to a specific event, the event name is normalized automatically, so the suffix can be omitted.
-{% endhint %}
-
 ### Using overrides
 
 Solidus is a large and complex platform and, while new built-in customization hooks and events are introduced all the time to make the platform easier to extend, there may be situations where Solidus doesn't provide an official API to customize what you need. When that's the case, Ruby's meta-programming features come to the rescue, allowing you to extend and/or override whatever you want.
@@ -166,18 +118,12 @@ As you can see, there is no "clean" way we can extend this method: no built-in c
 However, we can still use plain old Ruby and the power of [`Module#prepend`](https://ruby-doc.org/core-2.6.1/Module.html#method-i-prepend). If you're not familiar with it, `#prepend` is a method that allows us to insert a module at the beginning of another module's ancestors chain. Think of it as taking a module A and placing it "in front" of another module B: when you call a method on module B, Ruby will first hit module A and then continue down the chain of ancestors.
 
 {% hint style="info" %}
-The Solidus ecosystem used to rely heavily on `#class_eval` for overrides, but `#prepend` is a much better option. In case you're curious and want to dig deeper into the internals of what's going on, there are a few tutorials on Ruby's ancestors chain and what makes `#prepend` better than its alternatives. Check out "[Ruby modules: Include vs Prepend vs Extend](https://medium.com/@leo_hetsch/ruby-modules-include-vs-prepend-vs-extend-f09837a5b073)" and "[A class\_eval monkey-patching pattern with prepend](https://bibwild.wordpress.com/2016/12/27/a-class_eval-monkey-patching-pattern-with-prepend/)". You may see old guides, tutorials and extensions still using `#class_eval`, but you should know this is a deprecated pattern.
+The Solidus ecosystem used to rely heavily on `#class_eval` for overrides, but `#prepend` is a cleaner and more easily maintainable approach. You may see old guides, tutorials and extensions still using `#class_eval`, but you should know this is a deprecated pattern.
 {% endhint %}
-
-{% hint style="warning" %}
-If you're not yet in Ruby 3 and you're prepending a module, take note that if Rails includes the module before the `prepend` is called, then Rails might not be able to include the prepended behavior. This might happen if you're prepending a views helper or an ActiveSupport concern. For these cases, you might have no choice but to use `#class_eval` to override the module. For more information, please see [Module.prepend does not work nicely with included modules](https://github.com/solidusio/solidus/issues/3371).
-{% endhint %}
-
-You can customize the `Spree::Product#available?` method by writing a module that will be prepended to `Spree::Product`. In the Solidus ecosystem, we call such modules **overrides.** Overrides are usually named in a descriptive way, that expresses how the override extends the original class.
 
 Here's our `AddGlobalHiddenFlag` override for `Spree::Product`:
 
-{% code title="app/overrides/amazing\_store/spree/product/add\_global\_hidden\_flag.rb" %}
+{% code title="app/overrides/amazing:store/spree/product/add:global:hidden:flag.rb" %}
 ```ruby
 module AmazingStore
   module Spree
@@ -201,3 +147,12 @@ As you can see, we are not only able to override the default `#available?` imple
 You should always prefer customizing Solidus via public, standardized APIs such as the built-in customization hooks and the event bus, whenever possible. When you use a supported API, it's much less likely your customization will be broken by a future upgrade that changes the part of the code you are overriding.
 {% endhint %}
 
+### Using the event bus
+
+Please, take a look at the [Subscribing to events ](subscribing-to-events.md)chapter for a complete description of the Event Bus on Solidus.
+
+{% hint style="warning" %}
+If you're not yet in Ruby 3 and you're prepending a module, take note that if Rails includes the module before the `prepend` is called, then Rails might not be able to include the prepended behavior. This might happen if you're prepending a views helper or an ActiveSupport concern. For these cases, you might have no choice but to use `#class_eval` to override the module. For more information, please see [Module.prepend does not work nicely with included modules](https://github.com/solidusio/solidus/issues/3371).
+{% endhint %}
+
+You can customize the `Spree::Product#available?` method by writing a module that will be prepended to `Spree::Product`. In the Solidus ecosystem, we call such modules **overrides.** Overrides are usually named in a descriptive way, that expresses how the override extends the original class.

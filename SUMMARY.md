@@ -14,6 +14,7 @@
 
 * [Creating your storefront](customization/creating-your-storefront.md)
 * [Customizing the core](customization/customizing-the-core.md)
+* [Subscribing to events](customization/subscribing-to-events.md)
 * [Customizing the backend](customization/customizing-the-backend.md)
 * [Customizing the API](customization/customizing-the-api.md)
 
@@ -32,4 +33,3 @@
 
 * [Redefining checkout steps](cookbook/redefining-checkout-steps.md)
 * [GraphQL API](cookbook/graphql-api.md)
-

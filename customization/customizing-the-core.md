@@ -117,11 +117,17 @@ As you can see, there is no "clean" way we can extend this method: no built-in c
 
 However, we can still use plain old Ruby and the power of [`Module#prepend`](https://ruby-doc.org/core-2.6.1/Module.html#method-i-prepend). If you're not familiar with it, `#prepend` is a method that allows us to insert a module at the beginning of another module's ancestors chain. Think of it as taking a module A and placing it "in front" of another module B: when you call a method on module B, Ruby will first hit module A and then continue down the chain of ancestors.
 
+In the Solidus ecosystem, we call **overrides** to the modules that are prepended**.** Overrides are usually named in a descriptive way that expresses how the override extends the original class.
+
 {% hint style="info" %}
 The Solidus ecosystem used to rely heavily on `#class_eval` for overrides, but `#prepend` is a cleaner and more easily maintainable approach. You may see old guides, tutorials and extensions still using `#class_eval`, but you should know this is a deprecated pattern.
 {% endhint %}
 
-Here's our `AddGlobalHiddenFlag` override for `Spree::Product`:
+{% hint style="warning" %}
+If you're not yet in Ruby 3 and you're prepending a module, take note that if Rails includes the module before the `prepend` is called, then Rails might not be able to include the prepended behavior. This might happen if you're prepending a views helper or an ActiveSupport concern. For these cases, you might have no choice but to use `#class_eval` to override the module. For more information, please see [Module.prepend does not work nicely with included modules](https://github.com/solidusio/solidus/issues/3371).
+{% endhint %}
+
+In our example, we can customize the `Spree::Product#available?` method by writing a module that will be prepended to `Spree::Product`. Here's our `AddGlobalHiddenFlag` override:
 
 {% code title="app/overrides/amazing:store/spree/product/add:global:hidden:flag.rb" %}
 ```ruby
@@ -150,9 +156,3 @@ You should always prefer customizing Solidus via public, standardized APIs such 
 ### Using the event bus
 
 Please, take a look at the [Subscribing to events ](subscribing-to-events.md)chapter for a complete description of the Event Bus on Solidus.
-
-{% hint style="warning" %}
-If you're not yet in Ruby 3 and you're prepending a module, take note that if Rails includes the module before the `prepend` is called, then Rails might not be able to include the prepended behavior. This might happen if you're prepending a views helper or an ActiveSupport concern. For these cases, you might have no choice but to use `#class_eval` to override the module. For more information, please see [Module.prepend does not work nicely with included modules](https://github.com/solidusio/solidus/issues/3371).
-{% endhint %}
-
-You can customize the `Spree::Product#available?` method by writing a module that will be prepended to `Spree::Product`. In the Solidus ecosystem, we call such modules **overrides.** Overrides are usually named in a descriptive way, that expresses how the override extends the original class.

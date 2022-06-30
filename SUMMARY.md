@@ -25,6 +25,7 @@
 * [Image processing](advanced-solidus/images-and-image-processing.md)
 * [Payments and refunds](advanced-solidus/payments-and-refunds.md)
 * [Promotions system](advanced-solidus/promotions-system.md)
+* [State machines](advanced-solidus/state-machines.md)
 * [Stock management](advanced-solidus/stock-and-fulfillment.md)
 * [Tax calculation](advanced-solidus/tax-calculation.md)
 * [User permissions](advanced-solidus/permission-management.md)

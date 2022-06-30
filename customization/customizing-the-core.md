@@ -127,6 +127,20 @@ The Solidus ecosystem used to rely heavily on `#class_eval` for overrides, but `
 If you're not yet in Ruby 3 and you're prepending a module, take note that if Rails includes the module before the `prepend` is called, then Rails might not be able to include the prepended behavior. This might happen if you're prepending a views helper or an ActiveSupport concern. For these cases, you might have no choice but to use `#class_eval` to override the module. For more information, please see [Module.prepend does not work nicely with included modules](https://github.com/solidusio/solidus/issues/3371).
 {% endhint %}
 
+To begin with, you need to set up the directory where you'll place your overrides so that Rails can pick them up:
+
+{% code title="config/application.rb" %}
+```ruby
+overrides = "#{Rails.root}/app/overrides"
+Rails.autoloaders.main.ignore(overrides)
+config.to_prepare do
+  Dir.glob("#{overrides}/**/*.rb").each do |override|
+    load override
+  end
+end
+```
+{% endcode %}
+
 In our example, we can customize the `Spree::Product#available?` method by writing a module that will be prepended to `Spree::Product`. Here's our `AddGlobalHiddenFlag` override:
 
 {% code title="app/overrides/amazing:store/spree/product/add:global:hidden:flag.rb" %}

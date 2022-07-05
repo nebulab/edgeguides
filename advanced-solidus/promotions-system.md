@@ -8,8 +8,12 @@ In order to achieve this level of flexibility, the promotions system is composed
 
 * **Promotion handlers** are responsible for activating a promotion at the right step of the customer experience.
 * **Promotion rules** are responsible for checking whether an order is eligible for a promotion.
-* **Promotion actions** are responsible for defining the discount\(s\) to be applied to eligible orders.
+* **Promotion actions** are responsible for defining the discount(s) to be applied to eligible orders.
 * **Adjustments** are responsible for storing discount information.
+
+{% hint style="info" %}
+Adjustments go beyond promotions and apply to other concepts that modify the order amount. Taxes are another good example.
+{% endhint %}
 
 Let's take the example of the following promotion:
 
@@ -17,154 +21,147 @@ Let's take the example of the following promotion:
 
 Here's the flow Solidus follows to apply such a promotion:
 
-1. When the customer enters their shipping information, the [`Shipping`](https://github.com/solidusio/solidus/blob/v3.0/core/app/models/spree/promotion_handler/shipping.rb) promotion handler activates the promotion on the order.
-2. When activated, the promotion will perform some [basic eligibility checks](https://github.com/solidusio/solidus/blob/v3.0/core/app/models/spree/promotion.rb#L130) \(e.g. usage limit, validity dates\) and then [ensure the defined promotion rules are met.](https://github.com/solidusio/solidus/blob/v3.0/core/app/models/spree/promotion.rb#L130)
-3. When called, the [`ItemTotal`](https://github.com/solidusio/solidus/blob/v3.0/core/app/models/spree/promotion/rules/item_total.rb) promotion rule will ensure the order's total is $100 USD or greater.
-4. Since the order is eligible for the promotion, the [`FreeShipping`](https://github.com/solidusio/solidus/blob/v3.0/core/app/models/spree/promotion/actions/free_shipping.rb) action is applied to the order's shipment. The action creates an adjustment that cancels the cost of the shipment.
+1. When the customer enters their shipping information, the [`Shipping`](https://github.com/solidusio/solidus/blob/master/core/app/models/spree/promotion\_handler/shipping.rb) promotion handler activates the promotion on the order.
+2. When activated, the promotion will perform some [basic eligibility checks](https://github.com/solidusio/solidus/blob/64b6b6eaf902337983c487cf10dfada8dbfc5160/core/app/models/spree/promotion.rb#L149) (e.g. usage limit, validity dates) and then [ensure the defined promotion rules are met.](https://github.com/solidusio/solidus/blob/64b6b6eaf902337983c487cf10dfada8dbfc5160/core/app/models/spree/promotion.rb#L149)
+3. When called, the [`ItemTotal`](https://github.com/solidusio/solidus/blob/master/core/app/models/spree/promotion/rules/item\_total.rb) promotion rule will ensure the order's total is $100 USD or greater.
+4. Since the order is eligible for the promotion, the [`FreeShipping`](https://github.com/solidusio/solidus/blob/master/core/app/models/spree/promotion/actions/free\_shipping.rb) action is applied to the order's shipment. The action creates an adjustment that cancels the cost of the shipment.
 5. The customer gets free shipping!
 
-This is the architecture at a glance. As you can see, Solidus already ships with some useful handlers, rules and actions out of the box.
+This is the architecture at a glance. As you can see, Solidus already ships with some useful handlers, rules, and actions out of the box.
 
 However, you're not limited to using the stock functionality. In fact, the promotions system shows its full potential when you use it to implement your own logic. In the rest of the guide, we'll use the promotions system to implement the following requirements:
 
-> We want to give influencers a referral code they can use to give their customers a 50% shipping discount in our store.
+> We want to uphold a partnership with a new payment platform by offering a 50% shipping discount when customers pay with it during the checkout.
 
-In order to do this, we'll have to implement our own handler, rule and action. Let's get to work!
-
-## Storing referral codes
-
-Because promotions already have a concept of codes, we're going to reuse the existing promotion codes system instead of adding our own field.
-
-Note that this also means our users will be able to apply referral codes on their orders by simply applying a coupon code in addition to using the provided referral URL.
+In order to do this, we'll have to implement our own handler, rule, and action. Let's get to work!
 
 ## Implementing a new handler
 
 There's nothing special about promotion handlers: technically, they're just plain old Ruby objects that are created and called in the right places during the checkout flow.
 
-For the purpose of our custom promotion, we'll need to create a new `Query` promotion handler that checks the current request's query string against a valid list of referral codes.
+There is no unified API for promotion handlers, but we can take inspiration from the [existing ones](https://github.com/solidusio/solidus/tree/master/core/app/models/spree/promotion\_handler) and use a similar format:
 
-There is no unified API for promotion handlers, but we can take inspiration from the [existing ones](https://github.com/solidusio/solidus/tree/master/core/app/models/spree/promotion_handler) and use a similar format:
-
+{% code title="app/models/amazing_store/promotion_handler/payment.rb" %}
 ```ruby
+# frozen_string_literal: true
+
 module AmazingStore
   module PromotionHandler
-    class Query
-      attr_reader :order, :query
+    class Payment
+      RULES_TYPE = 'AmazingStore::Promotion::Rules::Payment'
+      
+      attr_reader :order
 
-      def initialize(order, query)
+      def initialize(order)
         @order = order
-        @query = query
       end
 
       def activate
-        if promotion && promotion.eligible?(order)
-          promotion.activate(order: order)
+        promotions.each do |promotion|
+          promotion.activate(order: order) if promotion.eligible?(order)
         end
       end
 
       private
 
-      def promotion
-        @promotion ||= if query[:r].present?
-          Spree::PromotionCode.find_by(value: query[:r])&.promotion
-        end
+      def promotions
+        Spree::Promotion.
+          active.
+          joins(:promotion_rules).
+          where('promotion_rules.type' => RULES_TYPE)
       end
     end
   end
 end
 ```
+{% endcode %}
 
-Our promotion handler accepts an order and the current request's query string \(as a hash\), and activates the promotion with the provided referral code \(if any\) on the order.
+Our promotion handler selects a subset of promotions with a specific rule type that we haven't yet created. Then, it activates the eligible ones, i.e., those who obey its rules.
 
-{% hint style="info" %}
-**Why a handler and not a rule?**
+Remember that promotion handlers simply apply active promotions to the current order at the correct stage of the order workflow. While other handlers might pick up our promotions, they won't be able to activate it if they run before the payment step.  With the new handler, we want to ensure that promotions can be activated after a payment method has been selected for the order.
 
-You may be wondering why we have used a promotion handler to do this instead of a promotion rule to check the referral code. There are two main reasons:
+Let's call our handler as a callback after the checkout flow has transitioned from the  `:payment` state (see the [section on how to customize state machines](state-machines.md#customizing-core-behavior)):
 
-1. Conceptually, it is the handler's responsibility to "activate" a promotion at the right time, while a rule should simply check that the order is valid for a promotion.
-2. Unlike promotion handlers, rules are activated by the promotions system automatically, and there is no way for them to access the current request.
-
-With that said, we could have definitely followed other approaches, like storing the referral code on the order itself during the request, then validating it in a promotion rule. In most cases, there are many ways to implement the same promotion — you'll have to do some research and preparation to figure out what works best for your use case.
-{% endhint %}
-
-As we mentioned initially, Solidus doesn't know anything about custom promotion handlers and will not call them for you: it's your responsibility to call them when needed. The next step, then, is to call our new handler upon every request by using a override:
-
+{% code title="app/overrides/amazing_store/load_payment_promotion_handler.rb" %}
 ```ruby
+# frozen_string_literal: true
+
 module AmazingStore
-  module Spree
-    module StoreController
-      def self.prepended(base)
-        base.class_eval do
-          before_action :activate_referral_promotions
-        end
+  module LoadPaymentPromotionHandler
+    def self.prepended(base)
+      base.state_machine.after_transition(from: :payment) do |order|
+        AmazingStore::PromotionHandler::Payment.new(order).activate
       end
-
-      private
-
-      def activate_referral_promotions
-        AmazingStore::PromotionHandler::Query.new(
-          current_order,
-          request.query_parameters,
-        ).activate
-      end
-
-      ::Spree::StoreController.prepend self
     end
+
+    ::Spree::Order.prepend(self)
   end
 end
 ```
-
-By decorating `Spree::StoreController`, we make sure the handler is called on every storefront request.
+{% endcode %}
 
 ## Implementing a new rule
 
-Now that we have our handler, let's move on and implement the promotion rule that checks whether the customer is the influencer tied to that referral code. If they are, we're not going to grant them the discount — we don't want influencers giving themselves discounts!
+Now that we have our handler, let's move on and implement the promotion rule that checks whether the customer is using the promoted payment method.
 
-For simplicity, we'll just run a check on the order's email. However, in order to do that, we'll need to store the influencer's email somewhere on the promotion, and the best way to do that is to create a preference on the promotion rule itself:
+We'll allow store admins to edit which payment method carries the discount. The best way to do that is to create a preference for the promotion rule itself:
 
+{% code title="app/models/amazing_store/promotion/rules/payment.rb" %}
 ```ruby
+# frozen_string_literal: true
+
 module AmazingStore
   module Promotion
     module Rules
-      class NotInfluencer < Spree::PromotionRule
-        preference :influencer_email, :string, default: ''
+      class Payment < ::Spree::PromotionRule
+        DEFAULT_PREFERRED_PAYMENT_TYPE = 'AmazingStore::AmazingPaymentPlatform'
 
-        validates :preferred_influencer_email, format: {
-          allow_blank: true,
-          with: /@/,
-        }
+        ALLOWED_PAYMENT_TYPES = [
+          DEFAULT_PREFERRED_PAYMENT_TYPE,
+          'Spree::PaymentMethod::Check',
+          'Spree::PaymentMethod::CreditCard'
+        ].freeze
+
+        preference :payment_type, :string, default: DEFAULT_PREFERRED_PAYMENT_TYPE
+
+        validates :preferred_payment_type, inclusion: {
+          in: ALLOWED_PAYMENT_TYPES,
+          allow_blank: true
+        }, on: :update
 
         def applicable?(promotable)
           promotable.is_a?(Spree::Order)
         end
 
         def eligible?(order, _options = {})
-          preferred_influencer_email.present? &&
-            order.email != preferred_influencer_email
+          order.payments.any? do |payment|
+            payment.payment_method.type == preferred_payment_type
+          end
         end
       end
     end
   end
 end
 ```
+{% endcode %}
 
 {% hint style="warning" %}
-You may have noticed that we allow the influencer's email to be blank, but require it to be present for an order to be eligible. This is because promotion rules are initially created without any of their preferences, so that the correct form can be presented to the admin when configuring the rule. If we enforced the presence of an email since the very beginning, Solidus wouldn't be able to create the promotion rule and admins would get an error.
+You may have noticed that we allow the payment type to be blank on creation. This is because promotion rules are initially created without any of their preferences, so that the correct form can be presented to the admin when configuring the rule. If we enforced the presence of a payment type since the very beginning, Solidus wouldn't be able to create the promotion rule and admins would get an error.
 {% endhint %}
 
-Now that we have the implementation of our promotion rule, we also need to give admins a nice UI where they can manage the rule and enter the influencer's email. We just need to create the right partial:
+Now that we have the implementation of our promotion rule, we also need to give admins a nice UI where they can manage the rule and enter the promoted payment type. We just need to create the right partial, where we'll have a local variable `promotion_rule` available to access the current promotion rule instance:
 
-{% code title="app/views/backend/spree/promotions/rules/\_not\_influencer.html.erb" %}
+{% code title="app/views/spree/admin/promotions/rules/_payment.html.erb" %}
 ```markup
 <div class="row">
   <div class="col-6">
     <div class="field">
-      <%= AmazingStore::Promotion::Rules::NotInfluencer.human_attribute_name(:email) %>
+      <%= promotion_rule.class.human_attribute_name(:payment_type) %>
     </div>
   </div>
   <div class="col-6">
     <div class="field">
-      <%= string_field_tag "#{param_prefix}[preferred_influencer_email]", promotion_rule.preferred_influencer_email, class: 'fullwidth' %>
+      <%= select_tag "#{param_prefix}[preferred_payment_type]", options_for_select(promotion_rule.class::ALLOWED_PAYMENT_TYPES, promotion_rule.preferred_payment_type), class: 'fullwidth' %>
     </div>
   </div>
 </div>
@@ -176,78 +173,130 @@ The last step is to register our new promotion rule in an initializer:
 {% code title="config/initializers/promotions.rb" %}
 ```ruby
 # ...
-Rails.application.config.spree.promotions.rules << AmazingStore::Promotion::Rules::NotInfluencer
+Rails.application.config.spree.promotions.rules << 'AmazingStore::Promotion::Rules::Payment'
 ```
 {% endcode %}
 
-That's it! When you create a new promotion in the backend, we should now see the _Not Influencer_ promotion rule.
+When you create a new promotion in the backend, we should now see the _Payment_ promotion rule. For a better experience, we can associate a description so that it's rendered along its form:
+
+{% code title="config/locales/en.yml" %}
+```yaml
+en:
+  # ...
+  activerecord:
+    attributes:
+      amazing_store/promotion/rules/payment:
+        description: Must use the specified payment method
+```
+{% endcode %}
 
 ## Implementing a new action
 
-Finally, let's implement the promotion action that will grant customers a 50% shipping discount. In order to do that, we can take inspiration from the existing [`FreeShipping`](https://github.com/solidusio/solidus/blob/v3.0/core/app/models/spree/promotion/actions/free_shipping.rb) action:
+Finally, let's implement the promotion action that will grant customers a 50% shipping discount. In order to do that, we can take inspiration from the existing [`FreeShipping`](https://github.com/solidusio/solidus/blob/master/core/app/models/spree/promotion/actions/free\_shipping.rb) action:
 
+{% code title="app/models/amazing_store/promotion/actions/half_shipping.rb" %}
 ```ruby
-class AmazingStore::Promotion::Actions::HalfShipping < Spree::PromotionAction
-  # The `perform` method is called when an action is applied to an order or line
-  # item. The payload contains a lot of useful context:
-  # https://github.com/solidusio/solidus/blob/v3.0/core/app/models/spree/promotion.rb#L97
-  def perform(payload = {})
-    order = payload[:order]
-    promotion_code = payload[:promotion_code]
+# frozen_string_literal: true
 
-    results = order.shipments.map do |shipment|
-      # If the shipment has already been discounted by this promotion action,
-      # we skip it.
-      next false if shipment.adjustments.where(source: self).exists?
+module AmazingStore
+  module Promotion
+    module Actions
+      class HalfShipping < ::Spree::PromotionAction
+        # The `perform` method is called when an action is applied to an order or line
+        # item. The payload contains a lot of useful context:
+        # https://github.com/solidusio/solidus/blob/master/core/app/models/spree/promotion.rb#L97
+        def perform(payload = {})
+          order = payload[:order]
+          promotion_code = payload[:promotion_code]
 
-      # If not, we create an adjustment to apply a 50% discount on the shipment.
-      shipment.adjustments.create!(
-        order: shipment.order,
-        amount: shipment.cost * -0.5,
-        source: self,
-        promotion_code: promotion_code,
-        label: promotion.name,
-      )
+          results = order.shipments.map do |shipment|
+            # If the shipment has already been discounted by this promotion action,
+            # we skip it.
+            next false if shipment.adjustments.where(source: self).exists?
 
-      # We return true here to mark that the shipment has been discounted.
-      true
-    end
+            # If not, we create an adjustment to apply a 50% discount on the shipment.
+            shipment.adjustments.create!(
+              order: shipment.order,
+              amount: compute_amount(shipment),
+              source: self,
+              promotion_code: promotion_code,
+              label: promotion.name,
+            )
 
-    # `perform` needs to return true if any adjustments have been applied by
-    # the promotion action. Otherwise, it should return false.
-    results.any? { |result| result == true }
-  end
+            # We return true here to mark that the shipment has been discounted.
+            true
+          end
 
-  # The `remove_from` method should undo any actions done by `perform`. It is
-  # used when an order becomes ineligible for a given promotion and the promotion
-  # needs to be removed.
-  def remove_from(order)
-    order.shipments.each do |shipment|
-      shipment.adjustments.each do |adjustment|
-        if adjustment.source == self
-          # Here, we simply remove any adjustments on the order's shipments
-          # created by this promotion action.
-          shipment.adjustments.destroy!(adjustment)
+          # `perform` needs to return true if any adjustments have been applied by
+          # the promotion action. Otherwise, it should return false.
+          results.any? { |result| result == true }
+        end
+
+        def compute_amount(shipment)
+          shipment.cost * -0.5
+        end
+
+        # The `remove_from` method should undo any actions done by `perform`. It is
+        # used when an order becomes ineligible for a given promotion and the promotion
+        # needs to be removed.
+        def remove_from(order)
+          order.shipments.each do |shipment|
+            shipment.adjustments.each do |adjustment|
+              if adjustment.source == self
+                # Here, we simply remove any adjustments on the order's shipments
+                # created by this promotion action.
+                shipment.adjustments.destroy!(adjustment)
+              end
+            end
+          end
         end
       end
     end
   end
 end
 ```
+{% endcode %}
 
-As you can see, there's quite a bit going on here, but hopefully the comments help you understand the flow of the action and the purpose of the methods we implemented.
+As you can see, there's quite a bit going on here, but hopefully, the comments help you understand the flow of the action and the purpose of the methods we implemented.
+
+Just like rules, promotion actions can also have preferences and allow admin to define them via the UI. However, in this case, we don't need any of that. Still, Solidus will expect a partial for the action, so we should create an empty ERB file.
+
+{% code title="app/views/spree/admin/promotions/actions/_half_shipping.html.erb" %}
+```erb
+<!-- Intentionally empty -->
+```
+{% endcode %}
 
 {% hint style="info" %}
-Although we don't need it in this case, promotion actions can also have preferences and allow admins to define them via the UI. You can look at the [`CreateQuantityAdjustments`](https://github.com/solidusio/solidus/blob/v3.0/core/app/models/spree/promotion/actions/create_quantity_adjustments.rb) action and the [corresponding view](https://github.com/solidusio/solidus/blob/v3.0/backend/app/views/spree/admin/promotions/actions/_create_quantity_adjustments.html.erb) for an example.
+You can look at the [`CreateQuantityAdjustments`](https://github.com/solidusio/solidus/blob/master/core/app/models/spree/promotion/actions/create\_quantity\_adjustments.rb) action and the [corresponding view](https://github.com/solidusio/solidus/blob/master/backend/app/views/spree/admin/promotions/actions/\_create\_quantity\_adjustments.html.erb) for an example of actions with preferences.
 {% endhint %}
 
 Finally, we need to register our action by adding the following to an initializer:
 
 {% code title="config/initializers/promotions.rb" %}
 ```ruby
-Rails.application.config.spree.promotions.actions << AmazingStore::Promotion::Actions::HalfShipping
+# ...
+Rails.application.config.spree.promotions.actions << 'AmazingStore::Promotion::Actions::HalfShipping'
+```
+{% endcode %}
+
+Like before, let's add a human-friendly description:
+
+{% code title="config/locales/en.yml" %}
+```yaml
+en:
+  # ...
+  activerecord:
+    attributes:
+      amazing_store/promotion/actions/half_shipping:
+        description: Applies 50% discount in shipping
 ```
 {% endcode %}
 
 Restart the server and you should now see your new promotion action!
 
+Let's try it out!
+
+First of all, go to the _Promotions_ section on the backend and click _New Promotion_. In this case, it makes sense to check the _Apply to all orders_ option, as our promotion doesn't need a code. Once the promotion has been created, add the _Payment_ rule and the _Half shipping_ action.
+
+You can now go to the frontend and see how the shipment price is dropped by 50% if you select the configured payment method.

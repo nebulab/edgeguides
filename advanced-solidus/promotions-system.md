@@ -21,10 +21,10 @@ Let's take the example of the following promotion:
 
 Here's the flow Solidus follows to apply such a promotion:
 
-1. When the customer enters their shipping information, the [`Shipping`](https://github.com/solidusio/solidus/blob/master/core/app/models/spree/promotion\_handler/shipping.rb) promotion handler activates the promotion on the order.
+1. When the customer enters their shipping information, the [`Shipping`](https://github.com/solidusio/solidus/blob/64b6b6eaf902337983c487cf10dfada8dbfc5160/core/app/models/spree/promotion\_handler/shipping.rb) promotion handler activates the promotion on the order.
 2. When activated, the promotion will perform some [basic eligibility checks](https://github.com/solidusio/solidus/blob/64b6b6eaf902337983c487cf10dfada8dbfc5160/core/app/models/spree/promotion.rb#L149) (e.g. usage limit, validity dates) and then [ensure the defined promotion rules are met.](https://github.com/solidusio/solidus/blob/64b6b6eaf902337983c487cf10dfada8dbfc5160/core/app/models/spree/promotion.rb#L149)
-3. When called, the [`ItemTotal`](https://github.com/solidusio/solidus/blob/master/core/app/models/spree/promotion/rules/item\_total.rb) promotion rule will ensure the order's total is $100 USD or greater.
-4. Since the order is eligible for the promotion, the [`FreeShipping`](https://github.com/solidusio/solidus/blob/master/core/app/models/spree/promotion/actions/free\_shipping.rb) action is applied to the order's shipment. The action creates an adjustment that cancels the cost of the shipment.
+3. When called, the [`ItemTotal`](https://github.com/solidusio/solidus/blob/64b6b6eaf902337983c487cf10dfada8dbfc5160/core/app/models/spree/promotion/rules/item\_total.rb) promotion rule will ensure the order's total is $100 USD or greater.
+4. Since the order is eligible for the promotion, the [`FreeShipping`](https://github.com/solidusio/solidus/blob/64b6b6eaf902337983c487cf10dfada8dbfc5160/core/app/models/spree/promotion/actions/free\_shipping.rb) action is applied to the order's shipment. The action creates an adjustment that cancels the cost of the shipment.
 5. The customer gets free shipping!
 
 This is the architecture at a glance. As you can see, Solidus already ships with some useful handlers, rules, and actions out of the box.
@@ -39,7 +39,7 @@ In order to do this, we'll have to implement our own handler, rule, and action. 
 
 There's nothing special about promotion handlers: technically, they're just plain old Ruby objects that are created and called in the right places during the checkout flow.
 
-There is no unified API for promotion handlers, but we can take inspiration from the [existing ones](https://github.com/solidusio/solidus/tree/master/core/app/models/spree/promotion\_handler) and use a similar format:
+There is no unified API for promotion handlers, but we can take inspiration from the [existing ones](https://github.com/solidusio/solidus/tree/64b6b6eaf902337983c487cf10dfada8dbfc5160/core/app/models/spree/promotion\_handler) and use a similar format:
 
 {% code title="app/models/amazing_store/promotion_handler/payment.rb" %}
 ```ruby
@@ -204,7 +204,7 @@ module AmazingStore
       class HalfShipping < ::Spree::PromotionAction
         # The `perform` method is called when an action is applied to an order or line
         # item. The payload contains a lot of useful context:
-        # https://github.com/solidusio/solidus/blob/master/core/app/models/spree/promotion.rb#L97
+        # https://github.com/solidusio/solidus/blob/64b6b6eaf902337983c487cf10dfada8dbfc5160/core/app/models/spree/promotion.rb#L129
         def perform(payload = {})
           order = payload[:order]
           promotion_code = payload[:promotion_code]
@@ -257,7 +257,7 @@ end
 ```
 {% endcode %}
 
-As you can see, there's quite a bit going on here, but hopefully, the comments help you understand the flow of the action and the purpose of the methods we implemented.
+As you can see, there's quite a bit going on here, but hopefully, the comments help you with the flow of the action and the purpose of the methods we implemented.
 
 Just like rules, promotion actions can also have preferences and allow admin to define them via the UI. However, in this case, we don't need any of that. Still, Solidus will expect a partial for the action, so we should create an empty ERB file.
 
@@ -268,7 +268,7 @@ Just like rules, promotion actions can also have preferences and allow admin to 
 {% endcode %}
 
 {% hint style="info" %}
-You can look at the [`CreateQuantityAdjustments`](https://github.com/solidusio/solidus/blob/master/core/app/models/spree/promotion/actions/create\_quantity\_adjustments.rb) action and the [corresponding view](https://github.com/solidusio/solidus/blob/master/backend/app/views/spree/admin/promotions/actions/\_create\_quantity\_adjustments.html.erb) for an example of actions with preferences.
+You can look at the [`CreateQuantityAdjustments`](https://github.com/solidusio/solidus/blob/64b6b6eaf902337983c487cf10dfada8dbfc5160/core/app/models/spree/promotion/actions/create\_quantity\_adjustments.rb) action and the [corresponding view](https://github.com/solidusio/solidus/blob/64b6b6eaf902337983c487cf10dfada8dbfc5160/backend/app/views/spree/admin/promotions/actions/\_create\_quantity\_adjustments.html.erb) for an example of actions with preferences.
 {% endhint %}
 
 Finally, we need to register our action by adding the following to an initializer:

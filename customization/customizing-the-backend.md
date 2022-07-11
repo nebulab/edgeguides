@@ -9,27 +9,41 @@ In this guide, we'll implement a very simple rejection system that allows you to
 To simplify the implementation, we'll assume the rejected email addresses are stored in an environment variable as a comma-separated string. Here are a couple of user stories we'll use as reference for the feature's requirement:
 
 * rejected orders are flagged automatically;
-* admins can manually approve rejected orders.
+* admins can manually approve rejected orders;
+* admins can list all rejected orders.
 
 Without further ado, let's start writing some code!
 
 ## Adding new columns
 
-The first step is to add the `rejected` column to the `spree_orders` table, which we'll use to determine whether an order has been rejected. This is quite simple to do with [a migration](https://guides.rubyonrails.org/active_record_migrations.html):
+The first step is to add the `rejected` column to the `spree_orders` table, which we'll use to determine whether an order has been rejected. This is quite simple to do with [a migration](https://guides.rubyonrails.org/active\_record\_migrations.html):
 
 ```bash
 $ rails g migration AddRejectedToSpreeOrders rejected:boolean
-$ rails db:migrate
 ```
 
-This will add the `rejected` boolean column to `spree_orders`.
+Edit the newly generated migration file so the new column can't be `NULL` and defaults to `false`.
+
+```diff
+<     add_column :spree_orders, :rejected, :boolean
+---
+>     add_column :spree_orders, :rejected, :boolean, null: false, default: false
+```
+
+Finally, update your database by running:
+
+```bash
+$ rails db:migrate
+```
 
 ## Hooking into order events
 
 The first step is to flag an order as rejected when the email address on the order has been rejected. You can do this by creating a class whose job is to analyze an order and determine whether it should be flagged as rejected:
 
-{% code title="app/models/amazing\_store/order\_analyzer.rb" %}
+{% code title="app/models/amazing_store/order_analyzer.rb" %}
 ```ruby
+# frozen_string_literal: true
+
 module AmazingStore
   class OrderAnalyzer
     def analyze(order)
@@ -52,12 +66,14 @@ end
 
 You will then need to subscribe to the `order_finalized` event, which is fired when an order is placed successfully, and call the analyzer:
 
-{% code title="config/initializers/spree.rb" %}
+{% code title="config/initializers/spree_bus.rb" %}
 ```ruby
-# ...
+# frozen_string_literal: true
 
-Spree::Event.subscribe 'order_finalized' do |event|
-  AmazingStore::OrderAnalyzer.new.analyze(event.payload[:order])
+Rails.application.config.to_prepare do
+  Spree::Bus.subscribe :order_finalized do |event|
+    AmazingStore::OrderAnalyzer.new.analyze(event.payload[:order])
+  end
 end
 ```
 {% endcode %}
@@ -68,10 +84,12 @@ At this point, we have a dead-simple order analyzer that determines whether each
 
 In order to allow admins to remove an order from the rejected, we'll add a button to the order detail page that will trigger a new controller action.
 
-The first step is to add our custom action to `Spree::Admin::OrdersController`. We'll use an override to accomplish that:
+The first step is to add our custom action to `Spree::Admin::OrdersController`. We'll use an override (see the [overrides section](customizing-the-core.md#using-overrides) for how to set it upeckout/address) to accomplish that:
 
-{% code title="app/overrides/amazing\_store/spree/admin/orders\_controller/add\_remove\_from\_rejected\_action.rb" %}
+{% code title="app/overrides/amazing_store/spree/admin/orders_controller/add_remove_from_rejected_action.rb" %}
 ```ruby
+# frozen_string_literal: true
+
 module AmazingStore
   module Spree
     module Admin
@@ -118,7 +136,7 @@ In the next section, we'll see how to hook our custom controller action to a new
 
 We are going to add a "Remove from rejected" to the order toolbar:
 
-![](../.gitbook/assets/screenshot-solidemo.herokuapp.com-2020.05.18-14_42_32.png)
+![](../.gitbook/assets/screenshot-solidemo.herokuapp.com-2020.05.18-14\_42\_32.png)
 
 We are going to use the popular [Deface](https://github.com/spree/deface) gem to apply a patch to the default view. In case you're not familiar with it, Deface is a gem that allows you to "virtually" patch third-party views, meaning you can edit them without having to completely replace them in your application.
 
@@ -135,11 +153,11 @@ gem 'deface'
 ```
 {% endcode %}
 
-Once done, we need to identify which view we want to customize. By browsing through the backend's codebase, we can see the view in question is `spree/backend/orders/edit.html.erb`. If we inspect the view's source code, we can also see that we want our button to be included in the content for the `:page_actions` element, so that it's added to the toolbar actions when editing an order.
+Once done, we need to identify which view we want to customize. By browsing through the backend's codebase, we can see the view in question is `spree/adminz/orders/edit.html.erb`. If we inspect the view's source code, we can also see that we want our button to be included in the content for the `:page_actions` element, so that it's added to the toolbar actions when editing an order.
 
 Equipped with this information, we can now write our Deface override:
 
-{% code title="app/overrides/spree/admin/orders/edit/add\_remove\_from\_rejected.html.erb.deface" %}
+{% code title="app/overrides/spree/admin/orders/edit/add_remove_from_rejected.html.erb.deface" %}
 ```markup
 <!-- insert_before "erb[silent]:contains('if can?(:fire, @order)')" -->
 <li>
@@ -156,7 +174,7 @@ Equipped with this information, we can now write our Deface override:
 {% endcode %}
 
 {% hint style="warning" %}
-The path of overrides is extremely important: the directory where you put the override **must** match the path of the view you want to customize \(minus the extension\), and the override **must** have the `.html.erb.deface` extension for Deface to apply it correctly. If an override is not getting applied, the first thing you look at should be the path.
+The path of overrides is extremely important: the directory where you put the override **must** match the path of the view you want to customize (minus the extension), and the override **must** have the `.html.erb.deface` extension for Deface to apply it correctly. If an override is not getting applied, the first thing you look at should be the path.
 {% endhint %}
 
 {% hint style="info" %}
@@ -181,6 +199,86 @@ While it's also possible to hardcode the string in your views/controllers, using
 You can override default Spree translations in the exact same way, if you want to change the default labels or messages in the backend.
 {% endhint %}
 
+## Adding new search form fields
+
+The last point of our feature requires that users can list all the orders that are rejected. The most straightforward solution is adding a field to the orders' search form for our new `:rejected` attribute.
+
+{% hint style="info" %}
+Search forms in Solidus use the [ransack](https://github.com/activerecord-hackery/ransack) gem under the hood. Please, see its documentation for a complete description of everything that is supported.
+{% endhint %}
+
+The orders' search form is visible from the "Orders" menu item. We've already seen [how to override views with Deface](customizing-the-backend.md#defacing-admin-views). This time we need to override the index template for orders:
+
+{% code title="app/overrides/spree/admin/orders/edit/add_rejected_filter.html.erb.deface" %}
+```erb
+<!-- insert_bottom "[data-hook=admin_orders_index_search] .field-block" -->
+<div class="field">
+  <%= label_tag :q_rejected_eq, t('spree.rejected') %>
+  <%= f.select :rejected_eq, [[t('spree.say_yes'), true], [t('spree.say_no'), false]], include_blank: t('spree.all') %>
+<</div>
+```
+{% endcode %}
+
+The new field is already visible. However, for security reasons, you're still required to explicitly include the new attribute to the list of allowed queryable columns:
+
+{% code title="config/initializers/spree.rb" %}
+```ruby
+# ...
+Rails.application.config.to_prepare do
+  Spree::Order.whitelisted_ransackable_attributes |= ['rejected']
+end
+```
+{% endcode %}
+
+After restarting the server, you can try it out and confirm it's working as expected!
+
+## Adding new menu items
+
+If you wanted to give maximum prominence to the problem with rejected orders, you could consider adding a new item to the main admin menu. You can do that by creating a new [`Spree::BackendConfiguration::MenuItem`](https://github.com/solidusio/solidus/blob/df51df62fa9b829216958b21b20514b7a3d87b30/backend/lib/spree/backend\_configuration.rb#L37) instance:
+
+{% code title="config/initializers/spree.rb" %}
+```ruby
+# ...
+Spree::Backend::Config.configure do |config|
+  # ...
+  config.menu_items << config.class::MenuItem.new(
+    [:rejected_orders],
+    'ban',
+    url: '/admin/orders?q[rejected_eq]=true',
+    position: 0
+  )
+end
+```
+{% endcode %}
+
+Our new `:rejected_orders` menu item points to the same URL generated when only the [previously introduced filter](customizing-the-backend.md#adding-new-search-form-fields) is selected in the search form. We use [`ban`](https://fontawesome.com/search?q=ban\&s=solid%2Cbrands) as its [Font Awesome](https://fontawesome.com) icon and want its position to be the first one.
+
+{% hint style="info" %}
+The `position` argument is always considered after the "Order" menu item, which will always be on the very top of the sidebar. Therefore, the `:rejected_orders` item will be second in our example.
+{% endhint %}
+
+Finally, we need to add the translation so its label is rendered:
+
+{% code title="config/locales/en.yml" %}
+```yaml
+# ...
+en:
+  spree:
+    admin:
+      tab:
+        rejected_orders: Rejected orders
+```
+{% endcode %}
+
+After restarting again your server, you can see how everything is in place.
+
+There're other interesting options that you can give on the initialization of a menu item:
+
+* `condition:` can contain a `Proc` for when the menu item should be displayed. For instance, if we only wanted our example to be rendered when there's at least one rejected order, we could pass `condition: -> { Spree::Order.where(rejected: true).any? }`.
+* `match_path:` allows more flexibility to match the current URL and render the custom item as being active in the menu. For instance, we might want to have our example highlighted whenever the filter has been selected, regardless of other filters being applied: `match_path: %r{[rejected_eq]=true}`.
+* `label:` allows changing the key under `{lang}.spree.admin.tab` where the label translation can be found in the locale file.
+* `partial:` can be used in complex scenarios when you want a partial to be rendered as content within your menu item. For instance, `partial: 'spree/admin/orders/rejected_orders'`.
+
 ## Taking it from here
 
 Congratulations! You have implemented your first custom feature for the Solidus backend.
@@ -188,4 +286,3 @@ Congratulations! You have implemented your first custom feature for the Solidus 
 Of course, we have just scratched the surface of what's possible: the backend provides a lot of UI components and capabilities you may leverage. We suggest spending some time in the backend's codebase to get accustomed with all the different tools at your disposal, and doing some planning/research before every custom feature.
 
 By using a combination of custom controller actions, view overrides and automated tests, you'll be able to write custom admin features that are fully integrated with the Solidus experience, and yet are a joy to maintain and evolve over time.
-

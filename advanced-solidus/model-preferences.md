@@ -178,14 +178,11 @@ This can be done in any initializer, including `config/initializers/spree.rb`:
 {% code title="config/initializers/spree.rb" %}
 ```ruby
 Rails.application.config.to_prepare do
-  # The `unless` block is needed to support code reloading in Rails.
-  unless Spree::Config.static_model_preferences.for_class(AmazingStore::Greeter).any?
-    Spree::Config.static_model_preferences.add(
-      AmazingStore::Greeter,
-      'greeter_preferences',
-      name: ENV["GREETER_NAME"],
-    )
-  end
+  Spree::Config.static_model_preferences.add(
+    AmazingStore::Greeter,
+    'greeter_preferences',
+    name: ENV["GREETER_NAME"],
+  )
 end
 ```
 {% endcode %}
@@ -271,17 +268,14 @@ As you see, we've added an `api_key` preference for it, but we don't want its va
 {% code title="config/initializers/spree.rb" %}
 ```ruby
 # ...
-# To be simplified when https://github.com/solidusio/solidus/pull/4070 is done
 Rails.application.config.to_prepare do
-  unless Spree::Config.static_model_preferences.for_class(AmazingStore::AmazingPaymentMethod).any?
-    Spree::Config.static_model_preferences.add(
-      AmazingStore::AmazingPaymentMethod,
-      'amazing_payment_method_credentials',
-      api_key: ENV['AMAZING_PAYMENT_METHOD_API_KEY'],
-      server: Rails.env.production? ? 'production' : 'test',
-      test_mode: !Rails.env.production?
-    )
-  end
+  Spree::Config.static_model_preferences.add(
+    AmazingStore::AmazingPaymentMethod,
+    'amazing_payment_method_credentials',
+    api_key: ENV['AMAZING_PAYMENT_METHOD_API_KEY'],
+    server: Rails.env.production? ? 'production' : 'test',
+    test_mode: !Rails.env.production?
+  )
 end
 ```
 {% endcode %}

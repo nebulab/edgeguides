@@ -143,7 +143,7 @@ end
 
 In our example, we can customize the `Spree::Product#available?` method by writing a module that will be prepended to `Spree::Product`. Here's our `AddGlobalHiddenFlag` override:
 
-{% code title="app/overrides/amazing:store/spree/product/add:global:hidden:flag.rb" %}
+{% code title="app/overrides/amazing_store/spree/product/add_global_hidden_flag.rb" %}
 ```ruby
 module AmazingStore
   module Spree
